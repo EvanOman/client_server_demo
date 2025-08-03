@@ -8,3 +8,16 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Node.js dependencies
+node_modules/
+console/node_modules/
+sdk-ts/node_modules/
+
+# Build artifacts
+console/.next/
+*.log
+
+# Environment files
+.env
+.env.local
