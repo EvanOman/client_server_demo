@@ -1,0 +1,49 @@
+{
+  "name": "@tour-booking/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for tour booking API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "generate-types": "openapi-typescript ../api/openapi.yaml -o src/types.ts",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "eslint": "^8.57.0",
+    "openapi-typescript": "^7.3.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "undici": "^6.19.0"
+  },
+  "peerDependenciesMeta": {
+    "undici": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

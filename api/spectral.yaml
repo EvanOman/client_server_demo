@@ -1,0 +1,73 @@
+extends: [[spectral:oas, all]]
+
+rules:
+  operation-operationId:
+    severity: error
+  operation-tags:
+    severity: error
+  operation-description:
+    severity: warn
+  info-contact:
+    severity: error
+  oas3-api-servers:
+    severity: error
+  
+  # Custom rules for RPC-over-HTTP style
+  rpc-post-only:
+    message: "All RPC methods must use POST"
+    severity: error
+    given: "$.paths.*[?(@property !== 'post')]"
+    then:
+      function: falsy
+  
+  rpc-path-format:
+    message: "Paths must follow /v{version}/{service}/{method} format"
+    severity: error
+    given: "$.paths"
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^/v[0-9]+/[a-z]+/[a-z_]+$"
+  
+  rpc-request-body-required:
+    message: "All methods should have a request body (even if empty)"
+    severity: warn
+    given: "$.paths.*.post"
+    then:
+      field: "requestBody"
+      function: truthy
+  
+  idempotency-key-header:
+    message: "Mutating methods must require Idempotency-Key header"
+    severity: error
+    given: "$.paths.*.post[?(@['x-idempotent'] == true)]"
+    then:
+      field: "parameters"
+      function: schema
+      functionOptions:
+        schema:
+          type: array
+          contains:
+            type: object
+            properties:
+              $ref:
+                const: "#/components/parameters/IdempotencyKey"
+  
+  problem-response-format:
+    message: "Error responses must use application/problem+json"
+    severity: error
+    given: "$.paths.*.post.responses[409,422,404,500].content"
+    then:
+      field: "application/problem+json"
+      function: truthy
+  
+  schema-naming:
+    message: "Schema names should be PascalCase"
+    severity: error
+    given: "$.components.schemas"
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^[A-Z][a-zA-Z0-9]+$"

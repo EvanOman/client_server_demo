@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tour_booking
+      POSTGRES_USER: api_user
+      POSTGRES_PASSWORD: api_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api_user -d tour_booking"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../server
+      dockerfile: ../ops/docker/Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://api_user:api_password@postgres:5432/tour_booking
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../server:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  console:
+    build:
+      context: ../console
+      dockerfile: ../ops/docker/Dockerfile.console
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8001
+    ports:
+      - "3001:3000"
+    volumes:
+      - ../console:/app:cached
+      - /app/node_modules
+      - /app/.next
+    command: ["bun", "run", "dev"]
+
+volumes:
+  postgres_data:

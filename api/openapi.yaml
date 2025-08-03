@@ -1,0 +1,858 @@
+openapi: 3.1.0
+info:
+  title: Tour Booking API
+  version: 1.0.0
+  description: RPC-over-HTTP API for seat-limited tour bookings with time-bound reservation holds, waitlists, and inventory adjustments
+  contact:
+    name: API Support
+    email: api-support@example.com
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.staging.example.com
+    description: Staging environment
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: tour
+    description: Tour management operations
+  - name: departure
+    description: Departure management operations
+  - name: booking
+    description: Booking operations (hold, confirm, cancel)
+  - name: waitlist
+    description: Waitlist operations
+  - name: inventory
+    description: Inventory adjustment operations
+  - name: health
+    description: Health check operations
+
+paths:
+  /v1/tour/create:
+    post:
+      tags: [tour]
+      summary: Create a new tour
+      operationId: createTour
+      x-idempotent: true
+      x-idempotent-key: name_slug
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTourRequest'
+            examples:
+              example1:
+                value:
+                  name: "Northern Lights Adventure"
+                  slug: "northern-lights-adventure"
+                  description: "Experience the magical Aurora Borealis in Iceland"
+      responses:
+        '200':
+          description: Tour created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tour'
+        '409':
+          description: Tour already exists
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/departure/create:
+    post:
+      tags: [departure]
+      summary: Create a new departure
+      operationId: createDeparture
+      x-idempotent: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartureRequest'
+            examples:
+              example1:
+                value:
+                  tour_id: "tour_123"
+                  starts_at: "2024-12-15T09:00:00Z"
+                  capacity_total: 40
+                  price:
+                    amount: 29999
+                    currency: "USD"
+      responses:
+        '200':
+          description: Departure created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Departure'
+        '404':
+          description: Tour not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/departure/search:
+    post:
+      tags: [departure]
+      summary: Search departures
+      operationId: searchDepartures
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchDeparturesRequest'
+            examples:
+              example1:
+                value:
+                  tour_id: "tour_123"
+                  date_from: "2024-12-01"
+                  date_to: "2024-12-31"
+                  available_only: true
+                  limit: 20
+      responses:
+        '200':
+          description: Departures found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchDeparturesResponse'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/booking/hold:
+    post:
+      tags: [booking]
+      summary: Create or refresh a seat hold
+      operationId: createHold
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHoldRequest'
+            examples:
+              example1:
+                value:
+                  departure_id: "dep_123"
+                  seats: 3
+                  customer_ref: "cust_EVG"
+                  ttl_seconds: 600
+      responses:
+        '200':
+          description: Hold created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+        '409':
+          description: Conflict (capacity full or hold exists)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                full:
+                  value:
+                    type: "https://docs.example.com/errors/conflict"
+                    title: "Capacity full"
+                    status: 409
+                    code: "FULL"
+                    detail: "Departure dep_123 has no available seats"
+                    trace_id: "c0ffee-1234"
+        '422':
+          description: Idempotency key mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/booking/confirm:
+    post:
+      tags: [booking]
+      summary: Confirm a booking from a hold
+      operationId: confirmBooking
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmBookingRequest'
+            examples:
+              example1:
+                value:
+                  hold_id: "hold_456"
+      responses:
+        '200':
+          description: Booking confirmed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '409':
+          description: Hold expired or already confirmed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                expired:
+                  value:
+                    type: "https://docs.example.com/errors/conflict"
+                    title: "Hold expired"
+                    status: 409
+                    code: "HOLD_EXPIRED"
+                    detail: "Hold hold_456 has expired"
+                    trace_id: "c0ffee-5678"
+        '422':
+          description: Idempotency key mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/booking/cancel:
+    post:
+      tags: [booking]
+      summary: Cancel a booking
+      operationId: cancelBooking
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+            examples:
+              example1:
+                value:
+                  booking_id: "book_789"
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          description: Booking not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Booking already cancelled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Idempotency key mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/booking/get:
+    post:
+      tags: [booking]
+      summary: Get booking details
+      operationId: getBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetBookingRequest'
+      responses:
+        '200':
+          description: Booking found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          description: Booking not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/waitlist/join:
+    post:
+      tags: [waitlist]
+      summary: Join departure waitlist
+      operationId: joinWaitlist
+      x-idempotent: true
+      x-idempotent-key: customer_ref_departure_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinWaitlistRequest'
+            examples:
+              example1:
+                value:
+                  departure_id: "dep_123"
+                  customer_ref: "cust_EVG"
+      responses:
+        '200':
+          description: Joined waitlist successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitlistEntry'
+        '404':
+          description: Departure not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/waitlist/notify:
+    post:
+      tags: [waitlist]
+      summary: Process waitlist notifications (internal)
+      operationId: notifyWaitlist
+      x-idempotent: true
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyWaitlistRequest'
+      responses:
+        '200':
+          description: Waitlist processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyWaitlistResponse'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/inventory/adjust:
+    post:
+      tags: [inventory]
+      summary: Adjust departure capacity
+      operationId: adjustInventory
+      x-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustInventoryRequest'
+            examples:
+              increase:
+                value:
+                  departure_id: "dep_123"
+                  delta: 10
+                  reason: "Upgraded to larger bus"
+              decrease:
+                value:
+                  departure_id: "dep_123"
+                  delta: -5
+                  reason: "Bus maintenance reduced capacity"
+      responses:
+        '200':
+          description: Inventory adjusted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryAdjustment'
+        '409':
+          description: Capacity conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                conflict:
+                  value:
+                    type: "https://docs.example.com/errors/conflict"
+                    title: "Capacity conflict"
+                    status: 409
+                    code: "CAPACITY_CONFLICT"
+                    detail: "Cannot reduce capacity below active holds"
+                    trace_id: "c0ffee-9999"
+        '422':
+          description: Idempotency key mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /v1/health/ping:
+    post:
+      tags: [health]
+      summary: Health check
+      operationId: healthPing
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token authentication
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      description: Unique key for idempotent operations
+
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          minimum: 0
+          description: Amount in minor units (e.g., cents)
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          description: ISO 4217 currency code
+
+    Problem:
+      type: object
+      required: [title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Problem type URI
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Human-readable explanation
+        instance:
+          type: string
+          description: URI reference for this occurrence
+        code:
+          type: string
+          description: Application-specific error code
+        retryable:
+          type: boolean
+          description: Whether the operation can be retried
+        trace_id:
+          type: string
+          description: Trace ID for debugging
+        violations:
+          type: array
+          description: Validation errors
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+                description: JSON path to the invalid field
+              message:
+                type: string
+                description: Validation error message
+
+    Tour:
+      type: object
+      required: [id, name, slug, description]
+      properties:
+        id:
+          type: string
+          description: Unique tour ID
+        name:
+          type: string
+          description: Tour name
+        slug:
+          type: string
+          description: URL-friendly slug
+        description:
+          type: string
+          description: Tour description
+
+    Departure:
+      type: object
+      required: [id, tour_id, starts_at, capacity_total, capacity_available, price]
+      properties:
+        id:
+          type: string
+          description: Unique departure ID
+        tour_id:
+          type: string
+          description: Associated tour ID
+        starts_at:
+          type: string
+          format: date-time
+          description: Departure start time (ISO 8601)
+        capacity_total:
+          type: integer
+          minimum: 1
+          description: Total capacity
+        capacity_available:
+          type: integer
+          minimum: 0
+          description: Available capacity
+        price:
+          $ref: '#/components/schemas/Money'
+
+    Hold:
+      type: object
+      required: [id, departure_id, seats, customer_ref, status, expires_at]
+      properties:
+        id:
+          type: string
+          description: Unique hold ID
+        departure_id:
+          type: string
+          description: Associated departure ID
+        seats:
+          type: integer
+          minimum: 1
+          description: Number of seats held
+        customer_ref:
+          type: string
+          description: Customer reference
+        status:
+          type: string
+          enum: [ACTIVE, EXPIRED, CONFIRMED, CANCELED]
+          description: Hold status
+        expires_at:
+          type: string
+          format: date-time
+          description: Hold expiration time (ISO 8601)
+
+    Booking:
+      type: object
+      required: [id, hold_id, code, seats, customer_ref, status, created_at]
+      properties:
+        id:
+          type: string
+          description: Unique booking ID
+        hold_id:
+          type: string
+          description: Associated hold ID
+        code:
+          type: string
+          description: Booking confirmation code
+        seats:
+          type: integer
+          minimum: 1
+          description: Number of seats booked
+        customer_ref:
+          type: string
+          description: Customer reference
+        status:
+          type: string
+          enum: [CONFIRMED, CANCELED]
+          description: Booking status
+        created_at:
+          type: string
+          format: date-time
+          description: Booking creation time (ISO 8601)
+
+    WaitlistEntry:
+      type: object
+      required: [id, departure_id, customer_ref, created_at]
+      properties:
+        id:
+          type: string
+          description: Unique waitlist entry ID
+        departure_id:
+          type: string
+          description: Associated departure ID
+        customer_ref:
+          type: string
+          description: Customer reference
+        created_at:
+          type: string
+          format: date-time
+          description: Entry creation time (ISO 8601)
+        notified_at:
+          type: string
+          format: date-time
+          description: Notification time (ISO 8601)
+
+    InventoryAdjustment:
+      type: object
+      required: [id, departure_id, delta, reason, created_at, actor]
+      properties:
+        id:
+          type: string
+          description: Unique adjustment ID
+        departure_id:
+          type: string
+          description: Associated departure ID
+        delta:
+          type: integer
+          description: Capacity change (positive or negative)
+        reason:
+          type: string
+          description: Reason for adjustment
+        created_at:
+          type: string
+          format: date-time
+          description: Adjustment time (ISO 8601)
+        actor:
+          type: string
+          description: User who made the adjustment
+
+    CreateTourRequest:
+      type: object
+      required: [name, slug, description]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Tour name
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+          minLength: 1
+          maxLength: 255
+          description: URL-friendly slug
+        description:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Tour description
+
+    CreateDepartureRequest:
+      type: object
+      required: [tour_id, starts_at, capacity_total, price]
+      properties:
+        tour_id:
+          type: string
+          description: Associated tour ID
+        starts_at:
+          type: string
+          format: date-time
+          description: Departure start time (ISO 8601)
+        capacity_total:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Total capacity
+        price:
+          $ref: '#/components/schemas/Money'
+
+    SearchDeparturesRequest:
+      type: object
+      properties:
+        tour_id:
+          type: string
+          description: Filter by tour ID
+        date_from:
+          type: string
+          format: date
+          description: Start date filter
+        date_to:
+          type: string
+          format: date
+          description: End date filter
+        available_only:
+          type: boolean
+          default: false
+          description: Only show departures with availability
+        cursor:
+          type: string
+          description: Pagination cursor
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          description: Results per page
+
+    SearchDeparturesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Departure'
+        next_cursor:
+          type: string
+          description: Cursor for next page
+
+    CreateHoldRequest:
+      type: object
+      required: [departure_id, seats, customer_ref]
+      properties:
+        departure_id:
+          type: string
+          description: Departure to hold seats for
+        seats:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Number of seats to hold
+        customer_ref:
+          type: string
+          maxLength: 128
+          description: Customer reference
+        ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          default: 600
+          description: Hold duration in seconds
+
+    ConfirmBookingRequest:
+      type: object
+      required: [hold_id]
+      properties:
+        hold_id:
+          type: string
+          description: Hold to confirm
+
+    CancelBookingRequest:
+      type: object
+      required: [booking_id]
+      properties:
+        booking_id:
+          type: string
+          description: Booking to cancel
+
+    GetBookingRequest:
+      type: object
+      required: [booking_id]
+      properties:
+        booking_id:
+          type: string
+          description: Booking to retrieve
+
+    JoinWaitlistRequest:
+      type: object
+      required: [departure_id, customer_ref]
+      properties:
+        departure_id:
+          type: string
+          description: Departure to join waitlist for
+        customer_ref:
+          type: string
+          maxLength: 128
+          description: Customer reference
+
+    NotifyWaitlistRequest:
+      type: object
+      required: [departure_id]
+      properties:
+        departure_id:
+          type: string
+          description: Departure to process waitlist for
+
+    NotifyWaitlistResponse:
+      type: object
+      required: [processed_count]
+      properties:
+        processed_count:
+          type: integer
+          description: Number of waitlist entries processed
+        holds_created:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hold'
+
+    AdjustInventoryRequest:
+      type: object
+      required: [departure_id, delta, reason]
+      properties:
+        departure_id:
+          type: string
+          description: Departure to adjust
+        delta:
+          type: integer
+          description: Capacity change (positive or negative)
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Reason for adjustment
+
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+          description: Service status
+        timestamp:
+          type: string
+          format: date-time
+          description: Current server time (ISO 8601)
+        version:
+          type: string
+          description: API version
+
+  responses:
+    DefaultError:
+      description: Unexpected error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
