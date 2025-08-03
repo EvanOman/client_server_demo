@@ -1,7 +1,6 @@
 """Background worker for processing waitlist entries."""
 
 import logging
-from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,30 +16,30 @@ logger = logging.getLogger(__name__)
 class WaitlistWorker(BaseWorker):
     """
     Background worker that processes waitlist entries when capacity becomes available.
-    
+
     Monitors departures with waitlists and automatically creates holds for
     waitlisted customers when seats become available.
     """
-    
+
     def __init__(self, interval_seconds: int = 30):
         """
         Initialize the waitlist worker.
-        
+
         Args:
             interval_seconds: How often to check waitlists (default: 30s)
         """
         super().__init__(name="Waitlist", interval_seconds=interval_seconds)
-    
+
     async def process(self) -> None:
         """Process waitlist entries for departures with available capacity."""
         async with async_session_factory() as db:
             try:
                 # Find departures with both available capacity and waitlist entries
                 departures = await self._find_departures_with_waitlist_and_capacity(db)
-                
+
                 if not departures:
                     return
-                
+
                 logger.info(
                     f"Processing waitlists for {len(departures)} departures",
                     extra={
@@ -48,20 +47,20 @@ class WaitlistWorker(BaseWorker):
                         "worker": self.name,
                     }
                 )
-                
+
                 total_processed = 0
-                
+
                 # Create waitlist service with db session
                 waitlist_service = WaitlistService(db)
-                
+
                 # Process each departure
                 for departure in departures:
                     try:
                         result = await waitlist_service.process_waitlist(
-                            db, 
+                            db,
                             departure.id
                         )
-                        
+
                         if result.processed_count > 0:
                             logger.info(
                                 f"Processed {result.processed_count} waitlist entries for departure {departure.id}",
@@ -73,17 +72,17 @@ class WaitlistWorker(BaseWorker):
                                 }
                             )
                             total_processed += result.processed_count
-                            
+
                     except Exception as e:
                         logger.error(
-                            f"Error processing waitlist for departure {departure.id}: {str(e)}",
+                            f"Error processing waitlist for departure {departure.id}: {e!s}",
                             exc_info=True,
                             extra={
                                 "departure_id": departure.id,
                                 "worker": self.name,
                             }
                         )
-                
+
                 if total_processed > 0:
                     await db.commit()
                     logger.info(
@@ -93,26 +92,26 @@ class WaitlistWorker(BaseWorker):
                             "worker": self.name,
                         }
                     )
-                    
+
             except Exception as e:
                 await db.rollback()
                 logger.error(
-                    f"Error in waitlist worker: {str(e)}",
+                    f"Error in waitlist worker: {e!s}",
                     exc_info=True,
                     extra={"worker": self.name}
                 )
                 raise
-    
+
     async def _find_departures_with_waitlist_and_capacity(
-        self, 
+        self,
         db: AsyncSession
-    ) -> List[Departure]:
+    ) -> list[Departure]:
         """
         Find departures that have both available capacity and waitlist entries.
-        
+
         Args:
             db: Database session
-            
+
         Returns:
             List of departures to process
         """
@@ -124,6 +123,6 @@ class WaitlistWorker(BaseWorker):
             .distinct()
             .limit(100)  # Process up to 100 departures per iteration
         )
-        
+
         result = await db.execute(query)
         return list(result.scalars().all())

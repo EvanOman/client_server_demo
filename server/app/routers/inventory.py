@@ -1,20 +1,26 @@
 """Inventory router for capacity adjustment operations."""
 
 import logging
-from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Header
+from typing import Any
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
 from ..core.exceptions import ProblemDetailsException
 from ..schemas.inventory import AdjustInventoryRequest, InventoryAdjustment
-from ..services.inventory_service import InventoryService
 from ..services.idempotency_service import IdempotencyService
+from ..services.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/inventory", tags=["inventory"])
+
+# Define dependencies to avoid B008 linting errors
+DB_DEPENDENCY = Depends(get_db)
+IDEMPOTENCY_KEY_DEPENDENCY = Header(..., alias="Idempotency-Key")
+ACTOR_DEPENDENCY = Header("system", alias="X-Actor")
 
 
 def _convert_adjustment_to_schema(adjustment_model) -> InventoryAdjustment:
@@ -31,20 +37,20 @@ def _convert_adjustment_to_schema(adjustment_model) -> InventoryAdjustment:
 
 async def _handle_idempotent_adjustment(
     idempotency_key: str,
-    request_body: Dict[str, Any],
+    request_body: dict[str, Any],
     operation_func,
     db: AsyncSession
 ) -> JSONResponse:
     """Handle idempotent inventory adjustment operation."""
     idempotency_service = IdempotencyService(db)
-    
+
     # Check for existing response
     cached_response = await idempotency_service.check_idempotency(
         idempotency_key=idempotency_key,
         method="inventory/adjust",
         request_body=request_body
     )
-    
+
     if cached_response:
         status_code, response_body, response_headers = cached_response
         return JSONResponse(
@@ -52,13 +58,13 @@ async def _handle_idempotent_adjustment(
             content=response_body,
             headers=response_headers or {}
         )
-    
+
     # Execute operation
     try:
         result = await operation_func()
-        response_dict = result if isinstance(result, dict) else result
+        response_dict = result
         status_code = 200
-        
+
         # Store response for future idempotent requests
         await idempotency_service.store_response(
             idempotency_key=idempotency_key,
@@ -67,12 +73,12 @@ async def _handle_idempotent_adjustment(
             status_code=status_code,
             response_body=response_dict
         )
-        
+
         return JSONResponse(
             status_code=status_code,
             content=response_dict
         )
-        
+
     except ProblemDetailsException as e:
         # Store error response for idempotency
         await idempotency_service.store_response(
@@ -88,23 +94,23 @@ async def _handle_idempotent_adjustment(
 @router.post("/adjust", response_model=InventoryAdjustment)
 async def adjust_inventory(
     request: AdjustInventoryRequest,
-    db: AsyncSession = Depends(get_db),
-    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    db: AsyncSession = DB_DEPENDENCY,
+    idempotency_key: str = IDEMPOTENCY_KEY_DEPENDENCY,
     # In a real implementation, you'd extract actor from authentication context
-    actor: str = Header("system", alias="X-Actor")
+    actor: str = ACTOR_DEPENDENCY
 ) -> JSONResponse:
     """
     Adjust departure capacity.
-    
+
     This operation is idempotent based on the Idempotency-Key header.
     Can increase or decrease capacity, but cannot reduce below active holds.
     """
     inventory_service = InventoryService(db)
-    
+
     async def operation():
         adjustment = await inventory_service.adjust_inventory(request, actor)
         response_data = _convert_adjustment_to_schema(adjustment)
-        
+
         logger.info(
             "Inventory adjustment completed successfully",
             extra={
@@ -116,9 +122,9 @@ async def adjust_inventory(
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return response_data.model_dump()
-    
+
     try:
         return await _handle_idempotent_adjustment(
             idempotency_key=idempotency_key,
@@ -126,11 +132,11 @@ async def adjust_inventory(
             operation_func=operation,
             db=db
         )
-    
+
     except ProblemDetailsException:
         # Re-raise Problem Details exceptions as-is
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in inventory adjustment",
@@ -147,4 +153,4 @@ async def adjust_inventory(
         raise HTTPException(
             status_code=500,
             detail="Internal server error"
-        )
+        ) from e

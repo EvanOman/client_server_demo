@@ -1,19 +1,23 @@
 """Departure router for departure management operations."""
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
 from ..core.exceptions import ProblemDetailsException
-from ..schemas.departure import CreateDepartureRequest, SearchDeparturesRequest, Departure, SearchDeparturesResponse
 from ..schemas.common import Money
+from ..schemas.departure import CreateDepartureRequest, Departure, SearchDeparturesRequest, SearchDeparturesResponse
 from ..services.departure_service import DepartureService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/departure", tags=["departure"])
+
+# Define dependencies to avoid B008 linting errors
+DB_DEPENDENCY = Depends(get_db)
 
 
 def _convert_departure_to_schema(departure_model) -> Departure:
@@ -34,21 +38,21 @@ def _convert_departure_to_schema(departure_model) -> Departure:
 @router.post("/create", response_model=Departure)
 async def create_departure(
     request: CreateDepartureRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = DB_DEPENDENCY
 ) -> JSONResponse:
     """
     Create a new departure.
-    
+
     This operation is idempotent based on tour_id + starts_at combination.
     """
     departure_service = DepartureService(db)
-    
+
     try:
         # Create departure
         departure = await departure_service.create_departure(request)
-        
+
         response_data = _convert_departure_to_schema(departure)
-        
+
         logger.info(
             "Departure created successfully",
             extra={
@@ -58,16 +62,16 @@ async def create_departure(
                 "capacity_total": request.capacity_total
             }
         )
-        
+
         return JSONResponse(
             status_code=200,
             content=response_data.model_dump()
         )
-    
+
     except ProblemDetailsException:
         # Re-raise Problem Details exceptions as-is
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in departure creation",
@@ -81,37 +85,37 @@ async def create_departure(
         raise HTTPException(
             status_code=500,
             detail="Internal server error"
-        )
+        ) from e
 
 
 @router.post("/search", response_model=SearchDeparturesResponse)
 async def search_departures(
     request: SearchDeparturesRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = DB_DEPENDENCY
 ) -> JSONResponse:
     """
     Search departures based on criteria.
-    
+
     Supports filtering by tour, date range, and availability.
     Uses cursor-based pagination.
     """
     departure_service = DepartureService(db)
-    
+
     try:
         # Search departures
         result = await departure_service.search_departures(request)
-        
+
         # Convert models to schemas
         departure_schemas = [
             _convert_departure_to_schema(departure)
             for departure in result.items
         ]
-        
+
         response_data = SearchDeparturesResponse(
             items=departure_schemas,
             next_cursor=result.next_cursor
         )
-        
+
         logger.info(
             "Departure search completed",
             extra={
@@ -126,16 +130,16 @@ async def search_departures(
                 }
             }
         )
-        
+
         return JSONResponse(
             status_code=200,
             content=response_data.model_dump()
         )
-    
+
     except ProblemDetailsException:
         # Re-raise Problem Details exceptions as-is
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in departure search",
@@ -153,4 +157,4 @@ async def search_departures(
         raise HTTPException(
             status_code=500,
             detail="Internal server error"
-        )
+        ) from e

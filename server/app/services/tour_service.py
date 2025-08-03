@@ -1,36 +1,35 @@
 """Tour service for business logic operations."""
 
 import logging
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.exceptions import ConflictError, NotFoundError
 from ..models.tour import Tour
 from ..schemas.tour import CreateTourRequest
-from ..core.exceptions import ConflictError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
 
 class TourService:
     """Service for tour-related operations."""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
-    
+
     async def create_tour(self, request: CreateTourRequest) -> Tour:
         """
         Create a new tour.
-        
+
         Args:
             request: Tour creation request
-            
+
         Returns:
             Created tour entity
-            
+
         Raises:
             ConflictError: If tour with same slug already exists
         """
@@ -52,30 +51,30 @@ class TourService:
                     "name": existing_tour.name
                 }
             )
-        
+
         # Create new tour
         tour = Tour(
             name=request.name,
             slug=request.slug,
             description=request.description
         )
-        
+
         try:
             self.db.add(tour)
             await self.db.commit()
             await self.db.refresh(tour)
-            
+
             logger.info(
                 "Tour created successfully",
                 extra={
                     "tour_id": str(tour.id),
                     "slug": tour.slug,
-                    "name": tour.name
+                    "tour_name": tour.name
                 }
             )
-            
+
             return tour
-            
+
         except IntegrityError as e:
             await self.db.rollback()
             logger.error(
@@ -96,51 +95,51 @@ class TourService:
                         "slug": existing_tour.slug,
                         "name": existing_tour.name
                     }
-                )
+                ) from e
             else:
                 # Some other constraint violation
                 raise ConflictError(
                     detail="Tour creation failed due to constraint violation"
-                )
-    
-    async def get_tour_by_id(self, tour_id: UUID) -> Optional[Tour]:
+                ) from e
+
+    async def get_tour_by_id(self, tour_id: UUID) -> Tour | None:
         """
         Get tour by ID.
-        
+
         Args:
             tour_id: Tour ID to search for
-            
+
         Returns:
             Tour if found, None otherwise
         """
         stmt = select(Tour).where(Tour.id == tour_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
-    async def get_tour_by_slug(self, slug: str) -> Optional[Tour]:
+
+    async def get_tour_by_slug(self, slug: str) -> Tour | None:
         """
         Get tour by slug.
-        
+
         Args:
             slug: Tour slug to search for
-            
+
         Returns:
             Tour if found, None otherwise
         """
         stmt = select(Tour).where(Tour.slug == slug)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
+
     async def get_tour_by_id_or_raise(self, tour_id: UUID) -> Tour:
         """
         Get tour by ID or raise NotFoundError.
-        
+
         Args:
             tour_id: Tour ID to search for
-            
+
         Returns:
             Tour entity
-            
+
         Raises:
             NotFoundError: If tour not found
         """

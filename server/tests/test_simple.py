@@ -1,6 +1,5 @@
 """Simple test to verify pytest setup."""
 
-import pytest
 
 
 def test_simple():

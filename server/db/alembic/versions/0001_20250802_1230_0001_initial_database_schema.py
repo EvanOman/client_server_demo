@@ -1,21 +1,21 @@
 """Initial database schema
 
 Revision ID: 0001
-Revises: 
+Revises:
 Create Date: 2025-08-02 12:30:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '0001'
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -33,7 +33,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_tours_name'), 'tours', ['name'], unique=False)
     op.create_index(op.f('ix_tours_slug'), 'tours', ['slug'], unique=False)
-    
+
     # Create departures table
     op.create_table('departures',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -55,7 +55,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_departures_starts_at'), 'departures', ['starts_at'], unique=False)
     op.create_index(op.f('ix_departures_tour_id'), 'departures', ['tour_id'], unique=False)
-    
+
     # Create holds table
     op.create_table('holds',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -79,7 +79,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_holds_expires_at'), 'holds', ['expires_at'], unique=False)
     op.create_index(op.f('ix_holds_idempotency_key'), 'holds', ['idempotency_key'], unique=False)
     op.create_index(op.f('ix_holds_status'), 'holds', ['status'], unique=False)
-    
+
     # Create bookings table
     op.create_table('bookings',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -105,7 +105,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_bookings_departure_id'), 'bookings', ['departure_id'], unique=False)
     op.create_index(op.f('ix_bookings_hold_id'), 'bookings', ['hold_id'], unique=False)
     op.create_index(op.f('ix_bookings_status'), 'bookings', ['status'], unique=False)
-    
+
     # Create waitlist_entries table
     op.create_table('waitlist_entries',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -122,7 +122,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_waitlist_entries_created_at'), 'waitlist_entries', ['created_at'], unique=False)
     op.create_index(op.f('ix_waitlist_entries_customer_ref'), 'waitlist_entries', ['customer_ref'], unique=False)
     op.create_index(op.f('ix_waitlist_entries_departure_id'), 'waitlist_entries', ['departure_id'], unique=False)
-    
+
     # Create inventory_adjustments table
     op.create_table('inventory_adjustments',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -150,7 +150,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_inventory_adjustments_created_at'), 'inventory_adjustments', ['created_at'], unique=False)
     op.create_index(op.f('ix_inventory_adjustments_departure_id'), 'inventory_adjustments', ['departure_id'], unique=False)
-    
+
     # Create idempotency_records table
     op.create_table('idempotency_records',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),

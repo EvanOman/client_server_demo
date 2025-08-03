@@ -2,6 +2,7 @@
 
 import pytest
 from httpx import AsyncClient
+
 from app.main import create_app
 
 
@@ -9,7 +10,7 @@ from app.main import create_app
 async def test_api_health_endpoints():
     """Test the health endpoints without database dependency."""
     app = create_app()
-    
+
     # Use transport for testing FastAPI apps
     from httpx import ASGITransport
     transport = ASGITransport(app=app)
@@ -19,13 +20,13 @@ async def test_api_health_endpoints():
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        
+
         # Test ready endpoint
         response = await client.get("/ready")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ready"
-        
+
         # Test info endpoint
         response = await client.get("/info")
         assert response.status_code == 200
@@ -38,7 +39,7 @@ async def test_api_health_endpoints():
 async def test_metrics_endpoint():
     """Test the metrics endpoint."""
     app = create_app()
-    
+
     from httpx import ASGITransport
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -51,7 +52,7 @@ async def test_metrics_endpoint():
 async def test_openapi_docs():
     """Test that OpenAPI docs are available in development."""
     app = create_app()
-    
+
     from httpx import ASGITransport
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

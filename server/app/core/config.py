@@ -1,68 +1,66 @@
 """Configuration settings for the FastAPI application."""
 
-from typing import Any, Dict, List, Optional, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
-import os
 
 
 class Settings(BaseSettings):
     """Application settings with Pydantic validation."""
-    
+
     # Database settings
     database_url: str = Field(
         default="postgresql+asyncpg://user:password@localhost:5432/dbname",
         env="DATABASE_URL",
         description="PostgreSQL async database URL"
     )
-    
+
     # Environment settings
     environment: str = Field(
         default="development",
         env="ENVIRONMENT",
         description="Application environment"
     )
-    
+
     # Logging settings
     log_level: str = Field(
         default="INFO",
         env="LOG_LEVEL",
         description="Application log level"
     )
-    
+
     # Security settings
     bearer_token_secret: str = Field(
         default="your-secret-key-here",
         env="BEARER_TOKEN_SECRET",
         description="Secret key for bearer token validation"
     )
-    
+
     # CORS settings
-    cors_origins: List[str] = Field(
+    cors_origins: list[str] = Field(
         default=["http://localhost:3001", "http://localhost:8001", "http://localhost:3000"],
         description="Allowed CORS origins"
     )
-    
+
     # Server settings
     host: str = Field(
         default="0.0.0.0",
         env="HOST",
         description="Server host"
     )
-    
+
     port: int = Field(
         default=8000,
         env="PORT",
         description="Server port"
     )
-    
+
     # Idempotency settings
     idempotency_ttl_seconds: int = Field(
         default=3600,
         env="IDEMPOTENCY_TTL_SECONDS",
         description="Time-to-live for idempotency keys in seconds"
     )
-    
+
     idempotency_cache_size: int = Field(
         default=10000,
         env="IDEMPOTENCY_CACHE_SIZE",
@@ -89,7 +87,7 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+    def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]

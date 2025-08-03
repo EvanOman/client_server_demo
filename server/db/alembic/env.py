@@ -15,9 +15,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import after path setup to avoid E402
+# ruff: noqa: E402
 from app.core.config import settings
 from app.core.database import Base
-from app.models import *  # noqa: F403, F401 - Import all models to ensure they're registered
+from app.models import *  # noqa: F403 - Import all models to ensure they're registered
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -42,13 +44,13 @@ def get_database_url() -> str:
     """Get database URL from settings or environment."""
     # Override with environment variable if set
     database_url = os.getenv("DATABASE_URL") or settings.database_url
-    
+
     # Ensure we're using the async driver
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    
+
     return database_url
 
 
@@ -93,7 +95,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
     database_url = get_database_url()
-    
+
     connectable = create_async_engine(
         database_url,
         poolclass=pool.NullPool,

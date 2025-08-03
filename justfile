@@ -31,6 +31,10 @@ py-typecheck:
 py-test:
     cd server && uv run pytest
 
+# Run specific Python test file
+py-test-file file:
+    cd server && uv run pytest {{file}} -v
+
 # Run Python tests with coverage
 py-test-coverage:
     cd server && uv run pytest --cov=app --cov-report=html

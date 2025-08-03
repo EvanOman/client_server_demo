@@ -1,16 +1,21 @@
 """Booking router for booking operations."""
 
 import logging
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Header
+from typing import Any
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
 from ..core.exceptions import ProblemDetailsException
 from ..schemas.booking import (
-    CreateHoldRequest, ConfirmBookingRequest, CancelBookingRequest, GetBookingRequest,
-    Hold, Booking
+    Booking,
+    CancelBookingRequest,
+    ConfirmBookingRequest,
+    CreateHoldRequest,
+    GetBookingRequest,
+    Hold,
 )
 from ..services.booking_service import BookingService
 from ..services.idempotency_service import IdempotencyService
@@ -18,6 +23,10 @@ from ..services.idempotency_service import IdempotencyService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/booking", tags=["booking"])
+
+# Define dependencies to avoid B008 linting errors
+DB_DEPENDENCY = Depends(get_db)
+IDEMPOTENCY_KEY_DEPENDENCY = Header(..., alias="Idempotency-Key")
 
 
 def _convert_hold_to_schema(hold_model) -> Hold:
@@ -48,20 +57,20 @@ def _convert_booking_to_schema(booking_model) -> Booking:
 async def _handle_idempotent_operation(
     method: str,
     idempotency_key: str,
-    request_body: Dict[str, Any],
+    request_body: dict[str, Any],
     operation_func,
     db: AsyncSession
 ) -> JSONResponse:
     """Handle idempotent operation with caching."""
     idempotency_service = IdempotencyService(db)
-    
+
     # Check for existing response
     cached_response = await idempotency_service.check_idempotency(
         idempotency_key=idempotency_key,
         method=method,
         request_body=request_body
     )
-    
+
     if cached_response:
         status_code, response_body, response_headers = cached_response
         return JSONResponse(
@@ -69,11 +78,11 @@ async def _handle_idempotent_operation(
             content=response_body,
             headers=response_headers or {}
         )
-    
+
     # Execute operation
     try:
         result = await operation_func()
-        
+
         if isinstance(result, JSONResponse):
             response_data = result.body.decode('utf-8')
             response_dict = eval(response_data)  # In production, use json.loads
@@ -81,7 +90,7 @@ async def _handle_idempotent_operation(
         else:
             response_dict = result
             status_code = 200
-        
+
         # Store response for future idempotent requests
         await idempotency_service.store_response(
             idempotency_key=idempotency_key,
@@ -90,12 +99,12 @@ async def _handle_idempotent_operation(
             status_code=status_code,
             response_body=response_dict
         )
-        
+
         return JSONResponse(
             status_code=status_code,
             content=response_dict
         )
-        
+
     except ProblemDetailsException as e:
         # Store error response for idempotency
         await idempotency_service.store_response(
@@ -111,20 +120,20 @@ async def _handle_idempotent_operation(
 @router.post("/hold", response_model=Hold)
 async def create_hold(
     request: CreateHoldRequest,
-    db: AsyncSession = Depends(get_db),
-    idempotency_key: str = Header(..., alias="Idempotency-Key")
+    db: AsyncSession = DB_DEPENDENCY,
+    idempotency_key: str = IDEMPOTENCY_KEY_DEPENDENCY
 ) -> JSONResponse:
     """
     Create or refresh a seat hold.
-    
+
     This operation is idempotent based on the Idempotency-Key header.
     """
     booking_service = BookingService(db)
-    
+
     async def operation():
         hold = await booking_service.create_hold(request, idempotency_key)
         response_data = _convert_hold_to_schema(hold)
-        
+
         logger.info(
             "Hold created successfully",
             extra={
@@ -135,9 +144,9 @@ async def create_hold(
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return response_data.model_dump()
-    
+
     try:
         return await _handle_idempotent_operation(
             method="booking/hold",
@@ -146,10 +155,10 @@ async def create_hold(
             operation_func=operation,
             db=db
         )
-    
+
     except ProblemDetailsException:
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in hold creation",
@@ -162,26 +171,26 @@ async def create_hold(
             },
             exc_info=True
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/confirm", response_model=Booking)
 async def confirm_booking(
     request: ConfirmBookingRequest,
-    db: AsyncSession = Depends(get_db),
-    idempotency_key: str = Header(..., alias="Idempotency-Key")
+    db: AsyncSession = DB_DEPENDENCY,
+    idempotency_key: str = IDEMPOTENCY_KEY_DEPENDENCY
 ) -> JSONResponse:
     """
     Confirm a booking from a hold.
-    
+
     This operation is idempotent based on the Idempotency-Key header.
     """
     booking_service = BookingService(db)
-    
+
     async def operation():
         booking = await booking_service.confirm_booking(request, idempotency_key)
         response_data = _convert_booking_to_schema(booking)
-        
+
         logger.info(
             "Booking confirmed successfully",
             extra={
@@ -191,9 +200,9 @@ async def confirm_booking(
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return response_data.model_dump()
-    
+
     try:
         return await _handle_idempotent_operation(
             method="booking/confirm",
@@ -202,10 +211,10 @@ async def confirm_booking(
             operation_func=operation,
             db=db
         )
-    
+
     except ProblemDetailsException:
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in booking confirmation",
@@ -216,26 +225,26 @@ async def confirm_booking(
             },
             exc_info=True
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/cancel", response_model=Booking)
 async def cancel_booking(
     request: CancelBookingRequest,
-    db: AsyncSession = Depends(get_db),
-    idempotency_key: str = Header(..., alias="Idempotency-Key")
+    db: AsyncSession = DB_DEPENDENCY,
+    idempotency_key: str = IDEMPOTENCY_KEY_DEPENDENCY
 ) -> JSONResponse:
     """
     Cancel a booking.
-    
+
     This operation is idempotent based on the Idempotency-Key header.
     """
     booking_service = BookingService(db)
-    
+
     async def operation():
         booking = await booking_service.cancel_booking(request, idempotency_key)
         response_data = _convert_booking_to_schema(booking)
-        
+
         logger.info(
             "Booking cancelled successfully",
             extra={
@@ -244,9 +253,9 @@ async def cancel_booking(
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return response_data.model_dump()
-    
+
     try:
         return await _handle_idempotent_operation(
             method="booking/cancel",
@@ -255,10 +264,10 @@ async def cancel_booking(
             operation_func=operation,
             db=db
         )
-    
+
     except ProblemDetailsException:
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in booking cancellation",
@@ -269,25 +278,25 @@ async def cancel_booking(
             },
             exc_info=True
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/get", response_model=Booking)
 async def get_booking(
     request: GetBookingRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = DB_DEPENDENCY
 ) -> JSONResponse:
     """
     Get booking details.
-    
+
     This is a read operation and does not require idempotency.
     """
     booking_service = BookingService(db)
-    
+
     try:
         booking = await booking_service.get_booking(request)
         response_data = _convert_booking_to_schema(booking)
-        
+
         logger.info(
             "Booking retrieved successfully",
             extra={
@@ -295,15 +304,15 @@ async def get_booking(
                 "booking_code": booking.code
             }
         )
-        
+
         return JSONResponse(
             status_code=200,
             content=response_data.model_dump()
         )
-    
+
     except ProblemDetailsException:
         raise
-    
+
     except Exception as e:
         logger.error(
             "Unexpected error in booking retrieval",
@@ -313,4 +322,4 @@ async def get_booking(
             },
             exc_info=True
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

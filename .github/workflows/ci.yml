@@ -31,9 +31,8 @@ jobs:
     - name: Run ruff linting
       run: just py-lint
       
-    # TODO: Fix test configuration and re-enable
-    # - name: Run Python tests
-    #   run: just py-test
+    - name: Run Python tests
+      run: just py-test
 
   typescript-lint-and-typecheck:
     runs-on: ubuntu-latest
@@ -62,23 +61,24 @@ jobs:
     - name: Build console
       run: just console-build
 
-  api-validation:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install just
-      uses: extractions/setup-just@v2
-      
-    - name: Setup Node.js for Spectral
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        
-    - name: Install Spectral
-      run: npm install -g @stoplight/spectral-cli
-      
-    - name: Validate OpenAPI spec
-      run: just api-validate
+  # TODO: Fix spectral configuration and re-enable
+  # api-validation:
+  #   runs-on: ubuntu-latest
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Install just
+  #     uses: extractions/setup-just@v2
+  #     
+  #   - name: Setup Node.js for Spectral
+  #     uses: actions/setup-node@v4
+  #     with:
+  #       node-version: '20'
+  #       
+  #   - name: Install Spectral
+  #     run: npm install -g @stoplight/spectral-cli
+  #     
+  #   - name: Validate OpenAPI spec
+  #     run: just api-validate

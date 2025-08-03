@@ -1,12 +1,12 @@
 """Database configuration and async session management."""
 
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from collections.abc import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
 
 from .config import settings
-
 
 # Create async engine
 engine = create_async_engine(
@@ -35,7 +35,7 @@ Base = declarative_base()
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency function that yields database sessions.
-    
+
     Yields:
         AsyncSession: Database session
     """

@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/v1/health", tags=["health"])
 async def health_ping() -> JSONResponse:
     """
     Health check endpoint.
-    
+
     Returns current service status and timestamp.
     """
     response_data = HealthResponse(
@@ -24,7 +25,7 @@ async def health_ping() -> JSONResponse:
         timestamp=datetime.utcnow(),
         version="1.0.0"
     )
-    
+
     logger.debug(
         "Health check requested",
         extra={
@@ -32,7 +33,7 @@ async def health_ping() -> JSONResponse:
             "timestamp": response_data.timestamp.isoformat()
         }
     )
-    
+
     return JSONResponse(
         status_code=200,
         content=response_data.model_dump()

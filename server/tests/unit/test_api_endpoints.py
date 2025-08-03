@@ -11,7 +11,7 @@ async def test_create_tour_endpoint(test_client, sample_tour_data):
         json=sample_tour_data,
         headers={"Authorization": "Bearer test-token"}
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == sample_tour_data["name"]
@@ -24,7 +24,7 @@ async def test_create_tour_endpoint(test_client, sample_tour_data):
 async def test_create_tour_missing_auth(test_client, sample_tour_data):
     """Test tour creation without authentication."""
     response = await test_client.post("/v1/tour/create", json=sample_tour_data)
-    
+
     assert response.status_code == 401
     data = response.json()
     assert data["status"] == 401
@@ -39,13 +39,13 @@ async def test_create_tour_invalid_data(test_client):
         "slug": "test-slug",
         "description": "Test description"
     }
-    
+
     response = await test_client.post(
         "/v1/tour/create",
         json=invalid_data,
         headers={"Authorization": "Bearer test-token"}
     )
-    
+
     assert response.status_code == 422
     data = response.json()
     assert data["status"] == 422
@@ -59,13 +59,13 @@ async def test_departure_search_endpoint(test_client):
         "available_only": True,
         "limit": 10
     }
-    
+
     response = await test_client.post(
         "/v1/departure/search",
         json=search_data,
         headers={"Authorization": "Bearer test-token"}
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
@@ -76,10 +76,10 @@ async def test_departure_search_endpoint(test_client):
 async def test_metrics_endpoint(test_client):
     """Test the Prometheus metrics endpoint."""
     response = await test_client.get("/metrics")
-    
+
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
-    
+
     # Check for some expected metrics
     content = response.text
     assert "http_requests_total" in content or "# HELP" in content

@@ -1,22 +1,23 @@
 """FastAPI dependencies for database, authentication, and idempotency."""
 
-from typing import AsyncGenerator, Optional
-from fastapi import Depends, HTTPException, Header, status
-from sqlalchemy.ext.asyncio import AsyncSession
-import jwt
-from jwt import PyJWTError
 import hashlib
 import time
-from datetime import datetime, timedelta
+from collections.abc import AsyncGenerator
+from datetime import datetime
 
-from .database import get_async_session
+import jwt
+from fastapi import Depends, Header, HTTPException, status
+from jwt import PyJWTError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .config import settings
+from .database import get_async_session
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Database dependency that provides async database sessions.
-    
+
     Yields:
         AsyncSession: Database session
     """
@@ -25,17 +26,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-    authorization: Optional[str] = Header(None, alias="Authorization")
+    authorization: str | None = Header(None, alias="Authorization")
 ) -> dict:
     """
     Authentication dependency that validates Bearer tokens.
-    
+
     Args:
         authorization: Authorization header with Bearer token
-        
+
     Returns:
         dict: User information from validated token
-        
+
     Raises:
         HTTPException: If token is invalid or missing
     """
@@ -45,7 +46,7 @@ async def get_current_user(
             detail="Authorization header missing",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     try:
         scheme, token = authorization.split()
         if scheme.lower() != "bearer":
@@ -54,13 +55,13 @@ async def get_current_user(
                 detail="Invalid authentication scheme",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    
+        ) from e
+
     try:
         payload = jwt.decode(
             token,
@@ -74,7 +75,7 @@ async def get_current_user(
                 detail="Invalid token payload",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         # Check token expiration
         exp = payload.get("exp")
         if exp and datetime.utcnow().timestamp() > exp:
@@ -83,20 +84,20 @@ async def get_current_user(
                 detail="Token has expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            
+
         return {
             "user_id": user_id,
             "username": payload.get("username"),
             "email": payload.get("email"),
             "roles": payload.get("roles", []),
         }
-        
+
     except PyJWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token validation failed: {str(e)}",
+            detail=f"Token validation failed: {e!s}",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from e
 
 
 # In-memory cache for idempotency keys (in production, use Redis)
@@ -115,54 +116,54 @@ def _cleanup_expired_keys() -> None:
 
 
 async def get_idempotency_key(
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")
-) -> Optional[str]:
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key")
+) -> str | None:
     """
     Extract and validate idempotency key from request headers.
-    
+
     Args:
         idempotency_key: Idempotency key from header
-        
+
     Returns:
         str: Validated idempotency key or None if not provided
-        
+
     Raises:
         HTTPException: If idempotency key format is invalid
     """
     if not idempotency_key:
         return None
-    
+
     # Clean up expired keys periodically
     _cleanup_expired_keys()
-    
+
     # Validate key length and format
     if len(idempotency_key) < 1 or len(idempotency_key) > 255:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Idempotency key must be between 1 and 255 characters"
         )
-    
+
     # Generate a hash of the key for consistent storage
     key_hash = hashlib.sha256(idempotency_key.encode()).hexdigest()
-    
+
     return key_hash
 
 
 async def check_idempotency(
-    idempotency_key: Optional[str] = Depends(get_idempotency_key)
-) -> Optional[dict]:
+    idempotency_key: str | None = Depends(get_idempotency_key)
+) -> dict | None:
     """
     Check if request with idempotency key has been processed before.
-    
+
     Args:
         idempotency_key: Hashed idempotency key
-        
+
     Returns:
         dict: Previous response if found, None otherwise
     """
     if not idempotency_key:
         return None
-    
+
     cached_response = _idempotency_cache.get(idempotency_key)
     if cached_response:
         current_time = time.time()
@@ -171,24 +172,24 @@ async def check_idempotency(
         else:
             # Remove expired entry
             del _idempotency_cache[idempotency_key]
-    
+
     return None
 
 
 async def store_idempotent_response(
     response_data: dict,
-    idempotency_key: Optional[str] = None
+    idempotency_key: str | None = None
 ) -> None:
     """
     Store response for idempotency key.
-    
+
     Args:
         response_data: Response data to cache
         idempotency_key: Hashed idempotency key
     """
     if not idempotency_key:
         return
-    
+
     # Implement cache size limit
     if len(_idempotency_cache) >= settings.idempotency_cache_size:
         # Remove oldest entry (simple FIFO)
@@ -197,7 +198,7 @@ async def store_idempotent_response(
             key=lambda k: _idempotency_cache[k]["timestamp"]
         )
         del _idempotency_cache[oldest_key]
-    
+
     _idempotency_cache[idempotency_key] = {
         "response": response_data,
         "timestamp": time.time()
@@ -205,7 +206,8 @@ async def store_idempotent_response(
 
 
 # Optional dependency for authenticated users
-OptionalAuth = lambda: Depends(get_current_user)
+def optional_auth():
+    return Depends(get_current_user)
 RequiredAuth = Depends(get_current_user)
 DatabaseSession = Depends(get_db)
 IdempotencyKey = Depends(get_idempotency_key)

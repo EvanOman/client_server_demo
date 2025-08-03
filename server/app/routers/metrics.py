@@ -17,7 +17,7 @@ router = APIRouter()
 async def metrics():
     """
     Return Prometheus metrics.
-    
+
     Returns:
         Response: Prometheus metrics in text format
     """

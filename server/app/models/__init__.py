@@ -8,22 +8,18 @@ from .tour import Tour
 from .waitlist import WaitlistEntry
 
 __all__ = [
-    # Core entities
-    "Tour",
+    "Booking",
+    "BookingStatus",
     "Departure",
-    
     # Booking entities
     "Hold",
     "HoldStatus",
-    "Booking", 
-    "BookingStatus",
-    
-    # Waitlist entity
-    "WaitlistEntry",
-    
-    # Inventory entity
-    "InventoryAdjustment",
-    
     # Idempotency entity
     "IdempotencyRecord",
+    # Inventory entity
+    "InventoryAdjustment",
+    # Core entities
+    "Tour",
+    # Waitlist entity
+    "WaitlistEntry",
 ]

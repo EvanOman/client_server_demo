@@ -1,31 +1,29 @@
 """FastAPI application initialization and configuration."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from .core.config import settings
-from .core.database import init_db, close_db
+from .core.database import close_db, init_db
 from .core.exceptions import (
     ProblemDetailsException,
-    problem_details_handler,
     generic_exception_handler,
+    problem_details_handler,
 )
 from .core.middleware import setup_middleware
 from .core.observability import (
-    setup_structured_logging,
-    setup_tracing,
-    setup_metrics,
     instrument_fastapi,
     instrument_sqlalchemy,
+    setup_metrics,
+    setup_structured_logging,
+    setup_tracing,
 )
-from .routers import booking, departure, health, inventory, tour, waitlist, metrics
+from .routers import booking, departure, health, inventory, metrics, tour, waitlist
 from .workers.manager import worker_manager
-
 
 # Configure structured logging
 setup_structured_logging()
@@ -44,57 +42,57 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan context manager.
-    
+
     Handles startup and shutdown events for the FastAPI application.
     """
     # Startup
     logger.info("Starting FastAPI application")
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Debug mode: {settings.debug}")
-    
+
     try:
         # Setup observability
         setup_tracing("tour-booking-api")
         setup_metrics("tour-booking-api")
         instrument_sqlalchemy()
         logger.info("Observability setup completed")
-        
+
         # Initialize database
         await init_db()
         logger.info("Database initialized successfully")
-        
+
         # Start background workers
         await worker_manager.start_all()
         logger.info("Background workers started successfully")
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")
         raise
-    
+
     logger.info("Application startup complete")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down FastAPI application")
-    
+
     try:
         # Stop background workers
         await worker_manager.stop_all()
         logger.info("Background workers stopped")
-        
+
         # Close database connections
         await close_db()
         logger.info("Database connections closed")
     except Exception as e:
         logger.error(f"Error during application cleanup: {e}")
-    
+
     logger.info("Application shutdown complete")
 
 
 def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
-    
+
     Returns:
         FastAPI: Configured FastAPI application instance
     """
@@ -108,7 +106,7 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
     )
-    
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -118,17 +116,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Request-ID", "traceparent", "tracestate"],
     )
-    
+
     # Setup custom middleware
     setup_middleware(app, enable_logging=True)
-    
+
     # Instrument FastAPI with OpenTelemetry
     instrument_fastapi(app)
-    
+
     # Register exception handlers
     app.add_exception_handler(ProblemDetailsException, problem_details_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
-    
+
     # Health check endpoint (inline)
     @app.get(
         "/health",
@@ -141,7 +139,7 @@ def create_app() -> FastAPI:
     async def health_check():
         """
         Health check endpoint that returns service status.
-        
+
         Returns:
             dict: Health status information
         """
@@ -152,7 +150,7 @@ def create_app() -> FastAPI:
             "environment": settings.environment,
             "debug": settings.debug,
         }
-    
+
     # Readiness check endpoint (inline)
     @app.get(
         "/ready",
@@ -165,7 +163,7 @@ def create_app() -> FastAPI:
     async def readiness_check():
         """
         Readiness check endpoint that verifies service dependencies.
-        
+
         Returns:
             dict: Readiness status information
         """
@@ -178,7 +176,7 @@ def create_app() -> FastAPI:
                 "dependencies": "ok",  # Would check external service dependencies
             },
         }
-    
+
     # Info endpoint (inline)
     @app.get(
         "/info",
@@ -191,7 +189,7 @@ def create_app() -> FastAPI:
     async def service_info():
         """
         Service information endpoint.
-        
+
         Returns:
             dict: Detailed service information
         """
@@ -215,7 +213,7 @@ def create_app() -> FastAPI:
                 "redoc": "/redoc" if settings.debug else None,
             },
         }
-    
+
     # Register API routers
     app.include_router(health.router)
     app.include_router(tour.router)
@@ -224,9 +222,9 @@ def create_app() -> FastAPI:
     app.include_router(waitlist.router)
     app.include_router(inventory.router)
     app.include_router(metrics.router)
-    
+
     logger.info("FastAPI application created and configured")
-    
+
     return app
 
 
@@ -236,7 +234,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "app.main:app",
         host=settings.host,

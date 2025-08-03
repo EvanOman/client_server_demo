@@ -4,17 +4,15 @@ import logging
 import secrets
 import string
 from datetime import datetime, timedelta
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.booking import Booking, Hold, HoldStatus, BookingStatus
-from ..models.departure import Departure
-from ..schemas.booking import CreateHoldRequest, ConfirmBookingRequest, CancelBookingRequest, GetBookingRequest
-from ..core.exceptions import ConflictError, NotFoundError, InsufficientQuantityError
+from ..core.exceptions import ConflictError, NotFoundError
+from ..models.booking import Booking, BookingStatus, Hold, HoldStatus
+from ..schemas.booking import CancelBookingRequest, ConfirmBookingRequest, CreateHoldRequest, GetBookingRequest
 from .departure_service import DepartureService
 
 logger = logging.getLogger(__name__)
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class CapacityFullError(ConflictError):
     """Exception when departure capacity is full."""
-    
+
     def __init__(self, departure_id: str, requested_seats: int, available_seats: int):
         super().__init__(
             detail=f"Departure {departure_id} has insufficient capacity. Requested: {requested_seats}, Available: {available_seats}",
@@ -40,7 +38,7 @@ class CapacityFullError(ConflictError):
 
 class HoldExpiredError(ConflictError):
     """Exception when hold has expired."""
-    
+
     def __init__(self, hold_id: str, expired_at: datetime):
         super().__init__(
             detail=f"Hold {hold_id} expired at {expired_at.isoformat()}Z"
@@ -55,36 +53,36 @@ class HoldExpiredError(ConflictError):
 
 class BookingService:
     """Service for booking-related operations."""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.departure_service = DepartureService(db)
-    
+
     def _generate_booking_code(self, length: int = 8) -> str:
         """Generate a random booking confirmation code."""
         alphabet = string.ascii_uppercase + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(length))
-    
+
     async def create_hold(self, request: CreateHoldRequest, idempotency_key: str) -> Hold:
         """
         Create a seat hold with capacity validation and atomic updates.
-        
+
         Args:
             request: Hold creation request
             idempotency_key: Idempotency key for this operation
-            
+
         Returns:
             Created hold entity
-            
+
         Raises:
             NotFoundError: If departure not found
             CapacityFullError: If insufficient capacity available
         """
         departure_id_uuid = UUID(request.departure_id)
-        
+
         # Get departure with advisory lock to prevent race conditions
         departure = await self.departure_service.get_departure_with_lock(departure_id_uuid)
-        
+
         # Check capacity
         if departure.capacity_available < request.seats:
             logger.warning(
@@ -101,10 +99,10 @@ class BookingService:
                 requested_seats=request.seats,
                 available_seats=departure.capacity_available
             )
-        
+
         # Calculate expiration time
         expires_at = datetime.utcnow() + timedelta(seconds=request.ttl_seconds)
-        
+
         # Create hold
         hold = Hold(
             departure_id=departure_id_uuid,
@@ -114,17 +112,17 @@ class BookingService:
             status=HoldStatus.ACTIVE,
             idempotency_key=idempotency_key
         )
-        
+
         # Update departure capacity atomically
         departure.capacity_available -= request.seats
-        
+
         # Save both entities
         self.db.add(hold)
         self.db.add(departure)
-        
+
         await self.db.commit()
         await self.db.refresh(hold)
-        
+
         logger.info(
             "Hold created successfully",
             extra={
@@ -137,32 +135,32 @@ class BookingService:
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return hold
-    
+
     async def confirm_booking(self, request: ConfirmBookingRequest, idempotency_key: str) -> Booking:
         """
         Confirm a booking from an active hold.
-        
+
         Args:
             request: Booking confirmation request
             idempotency_key: Idempotency key for this operation
-            
+
         Returns:
             Created booking entity
-            
+
         Raises:
             NotFoundError: If hold not found
             HoldExpiredError: If hold has expired
             ConflictError: If hold is not in ACTIVE status
         """
         hold_id_uuid = UUID(request.hold_id)
-        
+
         # Get hold with related departure
         stmt = select(Hold).options(selectinload(Hold.departure)).where(Hold.id == hold_id_uuid)
         result = await self.db.execute(stmt)
         hold = result.scalar_one_or_none()
-        
+
         if not hold:
             logger.warning(
                 "Hold not found for booking confirmation",
@@ -175,7 +173,7 @@ class BookingService:
                 resource_type="hold",
                 resource_id=request.hold_id
             )
-        
+
         # Check if hold is expired
         current_time = datetime.utcnow()
         if hold.expires_at <= current_time:
@@ -189,7 +187,7 @@ class BookingService:
                 }
             )
             raise HoldExpiredError(request.hold_id, hold.expires_at)
-        
+
         # Check hold status
         if hold.status != HoldStatus.ACTIVE:
             logger.warning(
@@ -203,7 +201,7 @@ class BookingService:
             raise ConflictError(
                 detail=f"Hold {request.hold_id} is not active (status: {hold.status})"
             )
-        
+
         # Check if booking already exists (idempotent behavior)
         existing_booking = await self.get_booking_by_hold_id(hold_id_uuid)
         if existing_booking:
@@ -216,12 +214,12 @@ class BookingService:
                 }
             )
             return existing_booking
-        
+
         # Generate unique booking code
         booking_code = self._generate_booking_code()
         while await self.get_booking_by_code(booking_code):
             booking_code = self._generate_booking_code()
-        
+
         # Create booking
         booking = Booking(
             hold_id=hold_id_uuid,
@@ -231,17 +229,17 @@ class BookingService:
             customer_ref=hold.customer_ref,
             status=BookingStatus.CONFIRMED
         )
-        
+
         # Update hold status
         hold.status = HoldStatus.CONFIRMED
-        
+
         # Save entities
         self.db.add(booking)
         self.db.add(hold)
-        
+
         await self.db.commit()
         await self.db.refresh(booking)
-        
+
         logger.info(
             "Booking confirmed successfully",
             extra={
@@ -253,30 +251,30 @@ class BookingService:
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return booking
-    
+
     async def cancel_booking(self, request: CancelBookingRequest, idempotency_key: str) -> Booking:
         """
         Cancel a booking and restore capacity.
-        
+
         Args:
             request: Booking cancellation request
             idempotency_key: Idempotency key for this operation
-            
+
         Returns:
             Cancelled booking entity
-            
+
         Raises:
             NotFoundError: If booking not found
             ConflictError: If booking is already cancelled
         """
         booking_id_uuid = UUID(request.booking_id)
-        
+
         # Get booking with related entities and lock departure
         booking = await self.get_booking_by_id_or_raise(booking_id_uuid)
         departure = await self.departure_service.get_departure_with_lock(booking.departure_id)
-        
+
         # Check if already cancelled (idempotent behavior)
         if booking.status == BookingStatus.CANCELED:
             logger.info(
@@ -287,24 +285,24 @@ class BookingService:
                 }
             )
             return booking
-        
+
         # Cancel booking
         booking.status = BookingStatus.CANCELED
-        
+
         # Restore capacity
         departure.capacity_available += booking.seats
-        
+
         # Update hold status
         stmt = update(Hold).where(Hold.id == booking.hold_id).values(status=HoldStatus.CANCELED)
         await self.db.execute(stmt)
-        
+
         # Save entities
         self.db.add(booking)
         self.db.add(departure)
-        
+
         await self.db.commit()
         await self.db.refresh(booking)
-        
+
         logger.info(
             "Booking cancelled successfully",
             extra={
@@ -315,31 +313,31 @@ class BookingService:
                 "idempotency_key": idempotency_key
             }
         )
-        
+
         return booking
-    
+
     async def get_booking(self, request: GetBookingRequest) -> Booking:
         """
         Get booking by ID.
-        
+
         Args:
             request: Get booking request
-            
+
         Returns:
             Booking entity
-            
+
         Raises:
             NotFoundError: If booking not found
         """
         booking_id_uuid = UUID(request.booking_id)
         return await self.get_booking_by_id_or_raise(booking_id_uuid)
-    
-    async def get_booking_by_id(self, booking_id: UUID) -> Optional[Booking]:
+
+    async def get_booking_by_id(self, booking_id: UUID) -> Booking | None:
         """Get booking by ID."""
         stmt = select(Booking).where(Booking.id == booking_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
+
     async def get_booking_by_id_or_raise(self, booking_id: UUID) -> Booking:
         """Get booking by ID or raise NotFoundError."""
         booking = await self.get_booking_by_id(booking_id)
@@ -353,37 +351,37 @@ class BookingService:
                 resource_id=str(booking_id)
             )
         return booking
-    
-    async def get_booking_by_hold_id(self, hold_id: UUID) -> Optional[Booking]:
+
+    async def get_booking_by_hold_id(self, hold_id: UUID) -> Booking | None:
         """Get booking by hold ID."""
         stmt = select(Booking).where(Booking.hold_id == hold_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
-    async def get_booking_by_code(self, code: str) -> Optional[Booking]:
+
+    async def get_booking_by_code(self, code: str) -> Booking | None:
         """Get booking by confirmation code."""
         stmt = select(Booking).where(Booking.code == code)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
-    async def get_hold_by_id(self, hold_id: UUID) -> Optional[Hold]:
+
+    async def get_hold_by_id(self, hold_id: UUID) -> Hold | None:
         """Get hold by ID."""
         stmt = select(Hold).where(Hold.id == hold_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-    
+
     async def expire_holds(self, batch_size: int = 100) -> int:
         """
         Expire holds that have passed their TTL and restore capacity.
-        
+
         Args:
             batch_size: Number of holds to process in one batch
-            
+
         Returns:
             Number of holds expired
         """
         current_time = datetime.utcnow()
-        
+
         # Find expired active holds
         stmt = (
             select(Hold)
@@ -394,29 +392,29 @@ class BookingService:
             )
             .limit(batch_size)
         )
-        
+
         result = await self.db.execute(stmt)
         expired_holds = list(result.scalars())
-        
+
         expired_count = 0
-        
+
         for hold in expired_holds:
             try:
                 # Get departure with lock
                 departure = await self.departure_service.get_departure_with_lock(hold.departure_id)
-                
+
                 # Update hold status
                 hold.status = HoldStatus.EXPIRED
-                
+
                 # Restore capacity
                 departure.capacity_available += hold.seats
-                
+
                 # Save changes
                 self.db.add(hold)
                 self.db.add(departure)
-                
+
                 expired_count += 1
-                
+
                 logger.info(
                     "Hold expired and capacity restored",
                     extra={
@@ -427,7 +425,7 @@ class BookingService:
                         "expired_at": hold.expires_at.isoformat()
                     }
                 )
-                
+
             except Exception as e:
                 logger.error(
                     "Failed to expire hold",
@@ -438,7 +436,7 @@ class BookingService:
                 )
                 await self.db.rollback()
                 continue
-        
+
         if expired_count > 0:
             await self.db.commit()
             logger.info(
@@ -448,5 +446,5 @@ class BookingService:
                     "batch_size": batch_size
                 }
             )
-        
+
         return expired_count
