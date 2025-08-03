@@ -36,5 +36,5 @@ async def health_ping() -> JSONResponse:
 
     return JSONResponse(
         status_code=200,
-        content=response_data.model_dump()
+        content=response_data.model_dump(mode='json')
     )

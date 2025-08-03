@@ -207,10 +207,13 @@ class DepartureService:
         """
         # Use PostgreSQL advisory lock to serialize operations on this departure
         # The lock will be automatically released at transaction end
-        await self.db.execute(
-            "SELECT pg_advisory_xact_lock(hashtext(%s))",
-            (str(departure_id),)
-        )
+        # Skip advisory locks for SQLite (used in tests)
+        if self.db.bind and "postgresql" in str(self.db.bind.dialect.name):
+            from sqlalchemy import text
+            await self.db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:departure_id))"),
+                {"departure_id": str(departure_id)}
+            )
 
         departure = await self.get_departure_by_id_or_raise(departure_id)
 

@@ -31,7 +31,7 @@ async def test_concurrent_holds_no_overbooking(test_session):
 
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=50,  # Limited capacity to test race conditions
             price=Money(amount=10000, currency="USD")
@@ -48,7 +48,7 @@ async def test_concurrent_holds_no_overbooking(test_session):
         try:
             hold = await booking_service.create_hold(
                 CreateHoldRequest(
-                    departure_id=departure.id,
+                    departure_id=str(departure.id),
                     seats=seats_per_request,
                     customer_ref=f"customer_{customer_id}",
                     ttl_seconds=600
@@ -94,7 +94,7 @@ async def test_concurrent_hold_and_cancel(test_session):
 
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=20,
             price=Money(amount=10000, currency="USD")
@@ -106,7 +106,7 @@ async def test_concurrent_hold_and_cancel(test_session):
     for i in range(10):
         hold = await booking_service.create_hold(
             CreateHoldRequest(
-                departure_id=departure.id,
+                departure_id=str(departure.id),
                 seats=1,
                 customer_ref=f"initial_customer_{i}",
                 ttl_seconds=600
@@ -120,7 +120,7 @@ async def test_concurrent_hold_and_cancel(test_session):
         try:
             hold = await booking_service.create_hold(
                 CreateHoldRequest(
-                    departure_id=departure.id,
+                    departure_id=str(departure.id),
                     seats=1,
                     customer_ref=f"new_customer_{customer_id}",
                     ttl_seconds=600
@@ -137,13 +137,13 @@ async def test_concurrent_hold_and_cancel(test_session):
             if hold_index < len(initial_holds):
                 booking = await booking_service.confirm_booking(
                     ConfirmBookingRequest(
-                        hold_id=initial_holds[hold_index].id
+                        hold_id=str(initial_holds[hold_index].id)
                     ),
                     idempotency_key=f"confirm_key_{hold_index}"
                 )
                 cancelled = await booking_service.cancel_booking(
                     CancelBookingRequest(
-                        booking_id=booking.id
+                        booking_id=str(booking.id)
                     ),
                     idempotency_key=f"cancel_key_{hold_index}"
                 )
@@ -186,7 +186,7 @@ async def test_concurrent_idempotent_operations(test_session):
 
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=100,
             price=Money(amount=10000, currency="USD")
@@ -201,7 +201,7 @@ async def test_concurrent_idempotent_operations(test_session):
         try:
             hold = await booking_service.create_hold(
                 CreateHoldRequest(
-                    departure_id=departure.id,
+                    departure_id=str(departure.id),
                     seats=5,
                     customer_ref="shared_customer",
                     ttl_seconds=600

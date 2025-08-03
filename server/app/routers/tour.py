@@ -42,11 +42,16 @@ async def create_tour(
                     extra={
                         "tour_id": str(existing_tour.id),
                         "slug": request.slug,
-                        "name": request.name
+                        "tour_name": request.name
                     }
                 )
 
-                response_data = Tour.model_validate(existing_tour)
+                response_data = Tour(
+                    id=str(existing_tour.id),
+                    name=existing_tour.name,
+                    slug=existing_tour.slug,
+                    description=existing_tour.description
+                )
                 return JSONResponse(
                     status_code=200,
                     content=response_data.model_dump()
@@ -55,14 +60,19 @@ async def create_tour(
         # Create new tour
         tour = await tour_service.create_tour(request)
 
-        response_data = Tour.model_validate(tour)
+        response_data = Tour(
+            id=str(tour.id),
+            name=tour.name,
+            slug=tour.slug,
+            description=tour.description
+        )
 
         logger.info(
             "Tour created successfully",
             extra={
                 "tour_id": str(tour.id),
                 "slug": request.slug,
-                "name": request.name
+                "tour_name": request.name
             }
         )
 

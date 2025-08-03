@@ -47,7 +47,7 @@ async def test_capacity_never_negative(test_session, capacity, seat_requests):
 
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=capacity,
             price=Money(amount=10000, currency="USD")
@@ -62,7 +62,7 @@ async def test_capacity_never_negative(test_session, capacity, seat_requests):
         try:
             hold = await booking_service.create_hold(
                 CreateHoldRequest(
-                    departure_id=departure.id,
+                    departure_id=str(departure.id),
                     seats=seats,
                     customer_ref=f"customer_{successful_holds}",
                     ttl_seconds=600
@@ -108,7 +108,7 @@ async def test_hold_confirm_idempotency(test_session, seats, ttl):
 
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=100,
             price=Money(amount=10000, currency="USD")
@@ -118,7 +118,7 @@ async def test_hold_confirm_idempotency(test_session, seats, ttl):
     # Create hold
     hold = await booking_service.create_hold(
         CreateHoldRequest(
-            departure_id=departure.id,
+            departure_id=str(departure.id),
             seats=seats,
             customer_ref="test_customer",
             ttl_seconds=ttl
@@ -129,14 +129,14 @@ async def test_hold_confirm_idempotency(test_session, seats, ttl):
     # Confirm booking multiple times with same idempotency key
     booking1 = await booking_service.confirm_booking(
         ConfirmBookingRequest(
-            hold_id=hold.id
+            hold_id=str(hold.id)
         ),
         idempotency_key="test_confirm_key"
     )
 
     booking2 = await booking_service.confirm_booking(
         ConfirmBookingRequest(
-            hold_id=hold.id
+            hold_id=str(hold.id)
         ),
         idempotency_key="test_confirm_key"
     )
@@ -169,7 +169,7 @@ async def test_waitlist_order_preserved(test_session, customer_refs):
     # Create departure with very limited capacity
     departure = await departure_service.create_departure(
         CreateDepartureRequest(
-            tour_id=tour.id,
+            tour_id=str(tour.id),
             starts_at=datetime.utcnow() + timedelta(days=30),
             capacity_total=1,
             price=Money(amount=10000, currency="USD")
@@ -180,7 +180,7 @@ async def test_waitlist_order_preserved(test_session, customer_refs):
     waitlist_entries = []
     for customer_ref in customer_refs:
         entry = await waitlist_service.join_waitlist(
-            departure_id=departure.id,
+            departure_id=str(departure.id),
             customer_ref=customer_ref
         )
         waitlist_entries.append(entry)
