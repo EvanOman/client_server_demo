@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.schemas.booking import CreateHoldRequest, ConfirmBookingRequest, CancelBookingRequest
+from app.schemas.booking import CancelBookingRequest, ConfirmBookingRequest, CreateHoldRequest
+from app.schemas.common import Money
 from app.schemas.departure import CreateDepartureRequest
 from app.schemas.tour import CreateTourRequest
-from app.schemas.common import Money
 from app.services.booking_service import BookingService
 from app.services.departure_service import DepartureService
 from app.services.tour_service import TourService

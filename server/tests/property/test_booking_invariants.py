@@ -7,10 +7,10 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from app.models.booking import HoldStatus
-from app.schemas.booking import CreateHoldRequest, ConfirmBookingRequest
+from app.schemas.booking import ConfirmBookingRequest, CreateHoldRequest
+from app.schemas.common import Money
 from app.schemas.departure import CreateDepartureRequest
 from app.schemas.tour import CreateTourRequest
-from app.schemas.common import Money
 from app.services.booking_service import BookingService
 from app.services.departure_service import DepartureService
 from app.services.tour_service import TourService

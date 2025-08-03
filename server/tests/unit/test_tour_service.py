@@ -1,8 +1,8 @@
 """Unit tests for tour service."""
 
-import pytest
-from sqlalchemy.exc import IntegrityError
 from uuid import uuid4
+
+import pytest
 
 from app.core.exceptions import ConflictError
 from app.schemas.tour import CreateTourRequest
