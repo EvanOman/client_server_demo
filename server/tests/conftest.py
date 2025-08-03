@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.main import create_app
 from app.models import *  # noqa: F403 - Import all models
 
 # Test database URL (in-memory SQLite for speed)
@@ -65,10 +64,10 @@ async def test_app(test_session):
     """Create a test FastAPI application."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
-    from app.core.config import settings
+
+    from app.core.exceptions import ProblemDetailsException, generic_exception_handler, problem_details_handler
     from app.routers import booking, departure, health, inventory, metrics, tour, waitlist
-    from app.core.exceptions import ProblemDetailsException, problem_details_handler, generic_exception_handler
-    
+
     # Create a simplified test app without lifespan
     app = FastAPI(
         title="Tour Booking API (Test)",

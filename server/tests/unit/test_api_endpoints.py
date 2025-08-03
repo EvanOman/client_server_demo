@@ -49,7 +49,7 @@ async def test_create_tour_invalid_data(test_client):
 
     assert response.status_code == 422
     data = response.json()
-    
+
     # Check if it's in FastAPI default format or our custom format
     if "detail" in data:
         # FastAPI default validation error format
